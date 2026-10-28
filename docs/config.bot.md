@@ -136,6 +136,11 @@ else:
         low_since_high <= high_since_open * (1 - close_retracement)
 ```
 
+`close_threshold` may be zero or negative (break-even or negative markup). A trailing close keeps
+the `high_since_open` gate in that case; it is never treated as already satisfied. A deeply
+underwater position therefore cannot trail-close on a small retracement, even in a quiet market
+where the volatility terms push the threshold below zero.
+
 Close orders are recursive when `close.threshold_we_weight != 0`: compute a slice up to
 `close.qty_pct`, simulate it filled, recompute `wel / wel_base`, then repeat until the position is
 exhausted or the close ladder is complete. If `close.retracement_base_pct <= 0` and

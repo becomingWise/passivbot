@@ -422,12 +422,12 @@ def test_positive_retracement_close_forms_one_relative_distance(source_name, sho
     verify_loaded_runtime_extension()
     source = getattr(passivbot_rust, source_name)()
     if source_name == "mps_trailing_martingale_source_py":
-        branch = source.index("} else if (cr > 0.0f)", source.index("float close_target ="))
+        branch = source.index("if (trailing_close && cr > 0.0f)", source.index("float close_target ="))
         first = source.index("close_target =", branch)
         last = source.index(";", first) + 1
         expression = source[first:last].replace("s.pprice", "price").replace("is_long", "!short_side")
     else:
-        branch = source.index("} else if (close_retracement > 0.0f)", source.index("float close_target ="))
+        branch = source.index("if (trailing_close && close_retracement > 0.0f)", source.index("float close_target ="))
         first = source.index("close_target =", branch)
         last = source.index(";", first) + 1
         expression = source[first:last].replace("pprice[c]", "price").replace("close_threshold", "ct").replace("close_retracement", "cr")

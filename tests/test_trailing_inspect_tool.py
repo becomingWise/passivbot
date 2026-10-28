@@ -953,7 +953,7 @@ def test_overview_qualifies_immediate_close_by_trailing_mode():
     )
 
     report = trailing_inspect.render_overview(result)
-    assert "With close trailing enabled, a non-positive threshold is immediate" in report
+    assert "a non-positive close threshold is still a price gate" in report
     assert "With close trailing disabled, the row is passive" in report
     assert "no extrema or reversal confirmation participate" in report
 
@@ -1370,3 +1370,33 @@ def test_overview_describes_effective_cooldown(base, floor, ceiling, weight, exp
     comments = " ".join(result["sides"]["long"]["classification"]["entry_comments"])
     assert expected in comments
     assert absent not in comments
+
+
+@pytest.mark.parametrize(("pside", "expected_threshold"), [("long", 98.0), ("short", 102.0)])
+def test_trailing_negative_close_threshold_remains_price_gate(pside, expected_threshold):
+    params = _params()
+    params["close"].update(
+        {
+            "retracement_base_pct": 0.001,
+            "retracement_volatility_1m_weight": 0.0,
+            "retracement_volatility_1h_weight": 0.0,
+            "threshold_base_pct": -0.02,
+            "threshold_we_weight": 0.0,
+            "threshold_volatility_1m_weight": 0.0,
+            "threshold_volatility_1h_weight": 0.0,
+        }
+    )
+    result = trailing_inspect.build_overview(
+        sources={pside: {"params": params, "context": _context()}},
+        parameter_source="test config",
+        price_anchor=100.0,
+        volatility_scenarios=(("only", 0.0, 0.0),),
+        exposure_ratios=(0.0,),
+    )
+
+    close = result["sides"][pside]["scenarios"][0]["close"]
+    assert close["geometry"]["threshold_gate_active"] is True
+    assert close["geometry"]["threshold_price"] == pytest.approx(expected_threshold)
+    headline = result["sides"][pside]["classification"]["close_headline"]
+    assert "negative markup" in headline
+    assert "immediate" not in headline

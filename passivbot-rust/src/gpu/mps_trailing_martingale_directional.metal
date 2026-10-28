@@ -1254,14 +1254,10 @@ inline void generate_orders(
     bool close_triggered = true;
     // Match Rust relative-price formation with one arithmetic rounding.
     float close_target = fma(s.pprice, is_long ? ct : -ct, s.pprice);
-    if (trailing_close) {
-        if (ct <= 0.0f) {
-            close_triggered = cr > 0.0f && retraced_close;
-            close_target = price_now;
-        } else if (cr > 0.0f) {
-            close_triggered = crossed_close && retraced_close;
-            close_target = fma(s.pprice, is_long ? ct - cr : -ct + cr, s.pprice);
-        }
+    // A non-positive threshold remains a (negative-markup) excursion gate, as in Rust.
+    if (trailing_close && cr > 0.0f) {
+        close_triggered = crossed_close && retraced_close;
+        close_target = fma(s.pprice, is_long ? ct - cr : -ct + cr, s.pprice);
     }
     int target_ticks = directional_ticks(close_target, price_step, close_up);
     bool static_close_distance = s.decimal_static_close && s.close_threshold_we == 0.0f
@@ -1270,7 +1266,7 @@ inline void generate_orders(
 #endif
         && (!(trailing_close && s.close_retracement_base > 0.0f)
             || s.decimal_static_close_retracement);
-    if (!(trailing_close && ct <= 0.0f) && static_close_distance) {
+    if (static_close_distance) {
         int proven = canonical_gpu_relative_ticks(s.pprice_tick, s.decimals[3], s.decimals[4],
             !is_long, trailing_close && s.close_retracement_base > 0.0f, close_up);
         if (proven >= 0) target_ticks = proven;
@@ -1279,8 +1275,8 @@ inline void generate_orders(
     // Compare the float64-derived directional touch ticks before choosing the
     // raw touch. Nearby raw and tick prices may be equal after float32
     // conversion even though exact Rust's max/min selects the raw value.
-    bool touch_controls = (trailing_close && ct <= 0.0f) || (close_up
-        ? close_touch > target_ticks : close_touch < target_ticks);
+    bool touch_controls = close_up
+        ? close_touch > target_ticks : close_touch < target_ticks;
     // calc_closes_long/short quantizes the selected close to nearest tick.
     int cticks = touch_controls ? touch_nearest_ticks : target_ticks;
     float close_price = float(cticks) * price_step;

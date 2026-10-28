@@ -366,7 +366,9 @@ def _geometry(
 ) -> dict[str, Any]:
     threshold_direction = -1.0 if (kind, pside) in {("entry", "long"), ("close", "short")} else 1.0
     retracement_direction = -threshold_direction
-    threshold_gate_active = threshold_pct > 0.0
+    # Rust keeps a trailing close's non-positive threshold as a break-even/negative-markup
+    # excursion gate; only entries treat a non-positive threshold as immediately satisfied.
+    threshold_gate_active = threshold_pct > 0.0 or (kind == "close" and retracement_pct > 0.0)
     passive_reference_price = position_price * (1.0 + threshold_direction * threshold_pct)
     threshold_price = (
         passive_reference_price if threshold_gate_active else None
@@ -592,6 +594,8 @@ def _threshold_style(kind: str, threshold_pct: float, *, trailing_enabled: bool)
             return "passive at-position"
         return f"passive {_threshold_style(kind, abs(threshold_pct), trailing_enabled=True)}"
     if threshold_pct <= 0.0:
+        if kind == "close":
+            return "break-even" if threshold_pct == 0.0 else "negative markup"
         return "immediate (no threshold gate)"
     cutoffs = (
         ((0.005 if kind == "entry" else 0.003), "aggressive/near"),
@@ -834,8 +838,9 @@ def _classify_side(
         )
     if close["threshold_pct"] <= 0.0 and close_trailing:
         close_comments.append(
-            "At this scenario the close threshold is non-positive, so the close behaves like an "
-            "immediately armed trailing stop rather than waiting for profit first."
+            "At this scenario the close threshold is non-positive: the close still waits for "
+            "favorable movement to reach break-even or the negative-markup threshold, so it can "
+            "accept a bounded loss but never trails from a deeply underwater price."
         )
     close_comments.append(
         _movement_description(
@@ -1664,9 +1669,10 @@ def render_overview(result: Mapping[str, Any]) -> str:
             "closes after projected PnL and fees are evaluated against account-wide allowance.",
             "* 'context unknown' is used for strategy-default reports without a config; no claim is "
             "made about live side enablement or orchestration/risk paths.",
-            "* With close trailing enabled, a non-positive threshold is immediate: trailing is "
-            "armed from position open. With close trailing disabled, the row is passive and no "
-            "extrema or reversal confirmation participate.",
+            "* With close trailing enabled, a non-positive close threshold is still a price gate "
+            "at break-even or a negative markup from position price; it is never immediate. "
+            "With close trailing disabled, the row is passive and no extrema or reversal "
+            "confirmation participate.",
             "* Trailing extrema reset after every fill for the same coin and position side.",
             "* Categories are descriptive heuristics for intuition, not trading-quality judgments.",
             "Percent inputs use config ratios: 0.01 = 1%.",

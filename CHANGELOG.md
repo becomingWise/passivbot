@@ -6,6 +6,13 @@ since the latest release tag; these features may already be available when insta
 
 ## Unreleased
 
+- Fix trailing-martingale trailing closes with a non-positive effective close threshold. Such a
+  threshold is now a break-even or negative-markup price gate, as documented, instead of
+  skipping the excursion check and closing at market. Before this fix, a quiet market that pushed
+  the volatility-weighted threshold below zero could close a deeply underwater position on any
+  small retracement. Backtests, GPU optimization and live bots that hit this condition will
+  produce different results. Trailing entries and passive grid closes are unchanged.
+
 - Authorize routine, evidence-backed replies in existing PR review threads for assigned
   implementation and review work without per-reply approval, preserving explicit user restrictions,
   privacy boundaries and disputed-thread resolution requirements.

@@ -282,7 +282,9 @@ def test_trailing_martingale_reset_extrema_cannot_emit_ordinary_trailing_close(
     assert reset["order_type"] == "close_trailing_long"
     assert reset["qty"] == pytest.approx(0.0)
     assert reset["triggered"] is False
-    assert reset["status"] == "waiting_retracement"
+    # The effective threshold is negative here; it still gates on a favorable excursion.
+    assert reset["threshold_pct"] < 0.0
+    assert reset["status"] == "waiting_threshold"
     assert seeded is not None
     assert seeded["order_type"] == "close_trailing_long"
     assert seeded["qty"] < 0.0

@@ -157,7 +157,8 @@ band distance even when `ema_gate_mode = "disabled"`. Candles and EMA bands are 
 for that tie-break, and missing EMA inputs must fail loudly.
 
 Close thresholds are additive so they can intentionally cross through break-even or negative markup
-as wallet exposure rises. Close retracement is volatility-weighted and intentionally has no
+as wallet exposure rises. A non-positive trailing close threshold remains a price gate at that
+markup (CPU and GPU replay alike); unlike entries, it is never "already satisfied". Close retracement is volatility-weighted and intentionally has no
 wallet-exposure modifier.
 
 TM grid and trailing re-entry/close distance targets use a fused base-plus-distance expression.

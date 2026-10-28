@@ -377,41 +377,45 @@ pub fn calc_trailing_close_long(
     );
     let close_trailing_retracement_pct = close_params.retracement_base_pct.max(0.0)
         * calc_close_retracement_multiplier(state_params, close_params);
-    if close_trailing_threshold_pct <= 0.0 {
-        // means trailing close immediately from pos open
-        if close_trailing_retracement_pct > 0.0
+    // A non-positive threshold is a break-even or negative markup, not a bypass of the
+    // excursion gate; dropping the gate would close deep underwater positions at market.
+    if close_trailing_retracement_pct <= 0.0 {
+        // close at threshold
+        let close_price = f64::max(
+            state_params.order_book.ask,
+            round_price_distance(
+                position.price,
+                close_trailing_threshold_pct,
+                exchange_params.price_step,
+                RoundingMode::Ceil,
+            ),
+        );
+        Order {
+            qty: -calc_close_qty(
+                &exchange_params,
+                &bot_params,
+                runtime_context,
+                &position,
+                close_params.qty_pct,
+                state_params.balance,
+                close_price,
+            ),
+            price: close_price,
+            order_type: OrderType::CloseTrailingLong,
+        }
+    } else {
+        // close if both conditions are met
+        if trailing_price_bundle.max_since_open
+            > position.price * (1.0 + close_trailing_threshold_pct)
             && trailing_price_bundle.min_since_max
                 < trailing_price_bundle.max_since_open * (1.0 - close_trailing_retracement_pct)
         {
-            Order {
-                qty: -calc_close_qty(
-                    &exchange_params,
-                    &bot_params,
-                    runtime_context,
-                    &position,
-                    close_params.qty_pct,
-                    state_params.balance,
-                    state_params.order_book.ask,
-                ),
-                price: state_params.order_book.ask,
-                order_type: OrderType::CloseTrailingLong,
-            }
-        } else {
-            Order {
-                qty: 0.0,
-                price: 0.0,
-                order_type: OrderType::CloseTrailingLong,
-            }
-        }
-    } else {
-        // means trailing close will activate only after a threshold
-        if close_trailing_retracement_pct <= 0.0 {
-            // close at threshold
             let close_price = f64::max(
                 state_params.order_book.ask,
-                round_price_distance(
+                round_compound_price_distance(
                     position.price,
                     close_trailing_threshold_pct,
+                    -close_trailing_retracement_pct,
                     exchange_params.price_step,
                     RoundingMode::Ceil,
                 ),
@@ -430,41 +434,10 @@ pub fn calc_trailing_close_long(
                 order_type: OrderType::CloseTrailingLong,
             }
         } else {
-            // close if both conditions are met
-            if trailing_price_bundle.max_since_open
-                > position.price * (1.0 + close_trailing_threshold_pct)
-                && trailing_price_bundle.min_since_max
-                    < trailing_price_bundle.max_since_open * (1.0 - close_trailing_retracement_pct)
-            {
-                let close_price = f64::max(
-                    state_params.order_book.ask,
-                    round_compound_price_distance(
-                        position.price,
-                        close_trailing_threshold_pct,
-                        -close_trailing_retracement_pct,
-                        exchange_params.price_step,
-                        RoundingMode::Ceil,
-                    ),
-                );
-                Order {
-                    qty: -calc_close_qty(
-                        &exchange_params,
-                        &bot_params,
-                        runtime_context,
-                        &position,
-                        close_params.qty_pct,
-                        state_params.balance,
-                        close_price,
-                    ),
-                    price: close_price,
-                    order_type: OrderType::CloseTrailingLong,
-                }
-            } else {
-                Order {
-                    qty: 0.0,
-                    price: 0.0,
-                    order_type: OrderType::CloseTrailingLong,
-                }
+            Order {
+                qty: 0.0,
+                price: 0.0,
+                order_type: OrderType::CloseTrailingLong,
             }
         }
     }
@@ -607,41 +580,44 @@ pub fn calc_trailing_close_short(
     );
     let close_trailing_retracement_pct = close_params.retracement_base_pct.max(0.0)
         * calc_close_retracement_multiplier(state_params, close_params);
-    if close_trailing_threshold_pct <= 0.0 {
-        // means trailing stop immediately from pos open
-        if close_trailing_retracement_pct > 0.0
+    // A non-positive threshold is a break-even or negative markup, not a bypass of the
+    // excursion gate; dropping the gate would close deep underwater positions at market.
+    if close_trailing_retracement_pct <= 0.0 {
+        // close at threshold
+        let close_price = f64::min(
+            state_params.order_book.bid,
+            round_price_distance(
+                position.price,
+                -close_trailing_threshold_pct,
+                exchange_params.price_step,
+                RoundingMode::Floor,
+            ),
+        );
+        Order {
+            qty: calc_close_qty(
+                &exchange_params,
+                &bot_params,
+                runtime_context,
+                &position,
+                close_params.qty_pct,
+                state_params.balance,
+                close_price,
+            ),
+            price: close_price,
+            order_type: OrderType::CloseTrailingShort,
+        }
+    } else {
+        if trailing_price_bundle.min_since_open
+            < position.price * (1.0 - close_trailing_threshold_pct)
             && trailing_price_bundle.max_since_min
                 > trailing_price_bundle.min_since_open * (1.0 + close_trailing_retracement_pct)
         {
-            Order {
-                qty: calc_close_qty(
-                    &exchange_params,
-                    &bot_params,
-                    runtime_context,
-                    &position,
-                    close_params.qty_pct,
-                    state_params.balance,
-                    state_params.order_book.bid,
-                ),
-                price: state_params.order_book.bid,
-                order_type: OrderType::CloseTrailingShort,
-            }
-        } else {
-            Order {
-                qty: 0.0,
-                price: 0.0,
-                order_type: OrderType::CloseTrailingShort,
-            }
-        }
-    } else {
-        // means trailing stop will activate only after a threshold
-        if close_trailing_retracement_pct <= 0.0 {
-            // close at threshold
             let close_price = f64::min(
                 state_params.order_book.bid,
-                round_price_distance(
+                round_compound_price_distance(
                     position.price,
                     -close_trailing_threshold_pct,
+                    close_trailing_retracement_pct,
                     exchange_params.price_step,
                     RoundingMode::Floor,
                 ),
@@ -660,40 +636,10 @@ pub fn calc_trailing_close_short(
                 order_type: OrderType::CloseTrailingShort,
             }
         } else {
-            if trailing_price_bundle.min_since_open
-                < position.price * (1.0 - close_trailing_threshold_pct)
-                && trailing_price_bundle.max_since_min
-                    > trailing_price_bundle.min_since_open * (1.0 + close_trailing_retracement_pct)
-            {
-                let close_price = f64::min(
-                    state_params.order_book.bid,
-                    round_compound_price_distance(
-                        position.price,
-                        -close_trailing_threshold_pct,
-                        close_trailing_retracement_pct,
-                        exchange_params.price_step,
-                        RoundingMode::Floor,
-                    ),
-                );
-                Order {
-                    qty: calc_close_qty(
-                        &exchange_params,
-                        &bot_params,
-                        runtime_context,
-                        &position,
-                        close_params.qty_pct,
-                        state_params.balance,
-                        close_price,
-                    ),
-                    price: close_price,
-                    order_type: OrderType::CloseTrailingShort,
-                }
-            } else {
-                Order {
-                    qty: 0.0,
-                    price: 0.0,
-                    order_type: OrderType::CloseTrailingShort,
-                }
+            Order {
+                qty: 0.0,
+                price: 0.0,
+                order_type: OrderType::CloseTrailingShort,
             }
         }
     }
@@ -789,8 +735,7 @@ pub fn calc_trailing_martingale_close_diagnostic(
     let (pside, threshold_met, retracement_met, order) = match side {
         StrategySide::Long => (
             "long",
-            threshold_pct <= 0.0
-                || trailing_price_bundle.max_since_open > position.price * (1.0 + threshold_pct),
+            trailing_price_bundle.max_since_open > position.price * (1.0 + threshold_pct),
             retracement_pct <= 0.0
                 || trailing_price_bundle.min_since_max
                     < trailing_price_bundle.max_since_open * (1.0 - retracement_pct),
@@ -806,8 +751,7 @@ pub fn calc_trailing_martingale_close_diagnostic(
         ),
         StrategySide::Short => (
             "short",
-            threshold_pct <= 0.0
-                || trailing_price_bundle.min_since_open < position.price * (1.0 - threshold_pct),
+            trailing_price_bundle.min_since_open < position.price * (1.0 - threshold_pct),
             retracement_pct <= 0.0
                 || trailing_price_bundle.max_since_min
                     > trailing_price_bundle.min_since_open * (1.0 + retracement_pct),
@@ -1538,6 +1482,208 @@ mod tests {
         assert_eq!(closes[0].order_type, OrderType::CloseTrailingLong);
         assert_eq!(closes[0].price, 100.3);
         assert_eq!(closes[0].qty, -10.0);
+    }
+
+    // Incident shape: position at the WEL cap far above market, trailing extrema reset by a
+    // small unstuck fill, then weeks of flat low-volatility candles. Low volatility drives the
+    // additive close threshold slightly negative; that must remain a near-break-even price gate.
+    fn make_underwater_close_case() -> (
+        ExchangeParams,
+        BotParams,
+        RuntimeOrderContext,
+        TrailingMartingaleCloseParams,
+        StateParams,
+    ) {
+        let exchange = ExchangeParams {
+            qty_step: 0.0001,
+            price_step: 0.1,
+            min_qty: 0.0001,
+            min_cost: 5.0,
+            c_mult: 1.0,
+            ..Default::default()
+        };
+        let bot = BotParams {
+            wallet_exposure_limit: 1.5,
+            risk_we_excess_allowance_pct: 0.0,
+            risk_wel_enforcer_enabled: false,
+            ..Default::default()
+        };
+        let runtime_context = RuntimeOrderContext {
+            effective_wallet_exposure_limit: 1.5,
+        };
+        let close = TrailingMartingaleCloseParams {
+            qty_pct: 0.84,
+            threshold_base_pct: -0.0027,
+            threshold_we_weight: -0.0001,
+            threshold_volatility_1h_weight: 0.48,
+            threshold_volatility_1m_weight: 3.22,
+            retracement_base_pct: 0.0005,
+            retracement_volatility_1h_weight: 22.95,
+            retracement_volatility_1m_weight: 52.34,
+        };
+        let state = StateParams {
+            balance: 105_900.0,
+            order_book: crate::types::OrderBook {
+                ask: 16824.5,
+                bid: 16824.4,
+                ..Default::default()
+            },
+            volatility_ema_1m: 0.0004,
+            volatility_ema_1h: 0.0025,
+            ..Default::default()
+        };
+        (exchange, bot, runtime_context, close, state)
+    }
+
+    fn flat_market_bundle(center: f64, half_range: f64, minutes: usize) -> TrailingPriceBundle {
+        use crate::trailing::update_trailing_bundle_with_candle;
+        let mut bundle = TrailingPriceBundle::default();
+        let mut prev = center;
+        for i in 0..minutes {
+            let close = center + (i as f64 * 0.01).sin() * half_range;
+            update_trailing_bundle_with_candle(
+                &mut bundle,
+                close.max(prev) + 3.0,
+                close.min(prev) - 3.0,
+                close,
+            );
+            prev = close;
+        }
+        bundle
+    }
+
+    #[test]
+    fn test_negative_trailing_close_threshold_long_does_not_close_deep_underwater() {
+        let (exchange, bot, ctx, close, state) = make_underwater_close_case();
+        let pos = Position {
+            size: 4.5855,
+            price: 34628.52,
+        };
+        let bundle = flat_market_bundle(16830.0, 60.0, 20 * 1440);
+        let threshold = calc_close_threshold_pct(&exchange, &state, &bot, &ctx, &close, &pos);
+        assert!(
+            threshold < 0.0,
+            "fixture must exercise a negative threshold"
+        );
+        assert!(bundle.min_since_max < bundle.max_since_open * 0.995);
+
+        let order = calc_next_close_long(&exchange, &state, &bot, &ctx, &close, &pos, &bundle);
+        assert_eq!(order.order_type, OrderType::CloseTrailingLong);
+        assert_eq!(order.qty, 0.0, "unexpected close {:?}", order);
+        assert!(calc_closes_long(&exchange, &state, &bot, &ctx, &close, &pos, &bundle).is_empty());
+
+        let diagnostic = calc_trailing_martingale_close_diagnostic(
+            StrategySide::Long,
+            &exchange,
+            &state,
+            &bot,
+            &ctx,
+            &close,
+            &pos,
+            &bundle,
+        );
+        assert!(!diagnostic.threshold_met);
+        assert_eq!(diagnostic.status, "waiting_threshold");
+    }
+
+    #[test]
+    fn test_negative_trailing_close_threshold_short_does_not_close_deep_underwater() {
+        let (exchange, bot, ctx, close, mut state) = make_underwater_close_case();
+        state.order_book.ask = 33650.1;
+        state.order_book.bid = 33650.0;
+        let pos = Position {
+            size: -2.0,
+            price: 16900.0,
+        };
+        let bundle = flat_market_bundle(33660.0, 120.0, 20 * 1440);
+        let threshold = calc_close_threshold_pct(&exchange, &state, &bot, &ctx, &close, &pos);
+        assert!(
+            threshold < 0.0,
+            "fixture must exercise a negative threshold"
+        );
+        assert!(bundle.max_since_min > bundle.min_since_open * 1.005);
+
+        let order = calc_next_close_short(&exchange, &state, &bot, &ctx, &close, &pos, &bundle);
+        assert_eq!(order.order_type, OrderType::CloseTrailingShort);
+        assert_eq!(order.qty, 0.0, "unexpected close {:?}", order);
+
+        let diagnostic = calc_trailing_martingale_close_diagnostic(
+            StrategySide::Short,
+            &exchange,
+            &state,
+            &bot,
+            &ctx,
+            &close,
+            &pos,
+            &bundle,
+        );
+        assert!(!diagnostic.threshold_met);
+        assert_eq!(diagnostic.status, "waiting_threshold");
+    }
+
+    #[test]
+    fn test_negative_trailing_close_threshold_is_bounded_negative_markup() {
+        let exchange = make_exchange_params();
+        let bot = make_recursive_close_bot();
+        let close = TrailingMartingaleCloseParams {
+            qty_pct: 1.0,
+            threshold_base_pct: -0.01,
+            retracement_base_pct: 0.002,
+            ..make_close_params()
+        };
+        let mut state = make_recursive_close_state();
+        let ctx = make_runtime_context();
+
+        // Long: the excursion reached 99.5 >= 100 * (1 - 0.01), then retraced below 99.5 * 0.998.
+        state.order_book.ask = 97.0;
+        state.order_book.bid = 96.99;
+        let long_pos = Position {
+            size: 10.0,
+            price: 100.0,
+        };
+        let long_bundle = TrailingPriceBundle {
+            max_since_open: 99.5,
+            min_since_max: 99.0,
+            ..Default::default()
+        };
+        let long = calc_next_close_long(
+            &exchange,
+            &state,
+            &bot,
+            &ctx,
+            &close,
+            &long_pos,
+            &long_bundle,
+        );
+        assert_eq!(long.order_type, OrderType::CloseTrailingLong);
+        assert_eq!(long.qty, -10.0);
+        // Price is floored at pos.price * (1 + threshold - retracement), not the 97.0 ask.
+        assert_eq!(long.price, 98.8);
+
+        // Short mirrors above position price.
+        state.order_book.ask = 103.01;
+        state.order_book.bid = 103.0;
+        let short_pos = Position {
+            size: -10.0,
+            price: 100.0,
+        };
+        let short_bundle = TrailingPriceBundle {
+            min_since_open: 100.5,
+            max_since_min: 101.0,
+            ..Default::default()
+        };
+        let short = calc_next_close_short(
+            &exchange,
+            &state,
+            &bot,
+            &ctx,
+            &close,
+            &short_pos,
+            &short_bundle,
+        );
+        assert_eq!(short.order_type, OrderType::CloseTrailingShort);
+        assert_eq!(short.qty, 10.0);
+        assert_eq!(short.price, 101.2);
     }
 
     #[test]

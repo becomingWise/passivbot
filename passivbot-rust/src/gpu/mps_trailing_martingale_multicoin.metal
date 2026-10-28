@@ -4393,24 +4393,18 @@ inline void generate_tm_multicoin_side_orders(
         bool close_triggered = true;
         float close_target = fma(pprice[c],
             short_side ? -close_threshold : close_threshold, pprice[c]);
-        if (trailing_close) {
-            if (close_threshold <= 0.0f) {
-                close_triggered = close_retracement > 0.0f
-                    && retraced_close;
-                close_target = price_now;
-            } else if (close_retracement > 0.0f) {
-                close_triggered = crossed_close && retraced_close;
-                close_target = fma(pprice[c], short_side
-                    ? -close_threshold + close_retracement
-                    : close_threshold - close_retracement, pprice[c]);
-            }
+        // A non-positive threshold remains a (negative-markup) excursion gate, as in Rust.
+        if (trailing_close && close_retracement > 0.0f) {
+            close_triggered = crossed_close && retraced_close;
+            close_target = fma(pprice[c], short_side
+                ? -close_threshold + close_retracement
+                : close_threshold - close_retracement, pprice[c]);
         }
         int close_touch = short_side ? touch_down : touch_up;
         int target_close_tick = short_side
             ? int(floor(close_target / price_step + 1.0e-6f))
             : int(ceil(close_target / price_step - 1.0e-6f));
-        if (!(trailing_close && close_threshold <= 0.0f)
-            && tm_static_decimal_distance(config.decimal_close_modifiers, coin_overrides, c, 2)
+        if (tm_static_decimal_distance(config.decimal_close_modifiers, coin_overrides, c, 2)
             && coin_close_threshold_we == 0.0f && coin_close_threshold_v1h == 0.0f
             && coin_close_threshold_v1m == 0.0f
             && (!(trailing_close && coin_close_retracement_base > 0.0f)
@@ -4421,10 +4415,9 @@ inline void generate_tm_multicoin_side_orders(
                 short_side, trailing_close && coin_close_retracement_base > 0.0f, !short_side);
             if (proven >= 0) target_close_tick = proven;
         }
-        bool close_touch_controls = (trailing_close
-            && close_threshold <= 0.0f) || (short_side
-                ? close_touch < target_close_tick
-                : close_touch > target_close_tick);
+        bool close_touch_controls = short_side
+            ? close_touch < target_close_tick
+            : close_touch > target_close_tick;
         int candidate_close_tick = close_touch_controls
             ? touch_nearest_ticks[k * C + c] : target_close_tick;
         float close_price = float(candidate_close_tick) * price_step;
